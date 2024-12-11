@@ -1,0 +1,178 @@
+################################################
+### Bivariate Recursion Mixture on R ###########
+################################################
+
+rm(list = setdiff(ls(), lsf.str())) #this command removes evertything except functions
+
+#set problem parameter
+tau=4
+n=25
+betaA=-0.5
+betaB=1
+sigma2A=1.2
+sigma2B=1
+w1=0.5
+y=rep(0,n)
+pop=c(1,2)
+x=sample(pop,n,replace=TRUE, prob=c(0.75,0.25))
+ngrid=250
+
+u=runif(n)
+
+#generate y
+for (i in 1:n){
+  if (u[i]<=w1){
+    y[i]=rnorm(1,betaA*x[i],sigma2A)  }
+  else{
+    y[i]=rnorm(1,betaB*x[i],sigma2B) 
+  }
+}
+
+datasim<-data.frame(y,x)
+
+#create the grid of point in which to evaluate the distribution (not needed I guess)
+if (n<ngrid){
+  extra=ngrid-n
+  miny=min(y)*1.5
+  maxy=max(y)*1.7
+  dist=(maxy-miny)/(extra-1)
+  extragr=seq(miny,maxy,dist)
+} else {
+  extragr=numeric(0)
+}
+
+ytest=sort(c(extragr,y))
+
+
+
+xtest=pop[order(pop)]
+
+#true distribution generate through functions
+
+
+#prior
+mup<-0
+sigmaP<-2
+cdn<-pnorm(ytest,mean=mup,sd=sqrt(sigmaP))
+cdn<-matrix(rep(cdn,length(xtest)),ncol=length(xtest))
+cdn0<- cdn #save the prior in order to use it for plot 
+
+size<-dim(cdn)
+
+###### Recursive procedure ######
+
+
+ptm <- proc.time()
+
+fit<-recursive(y,x,n,cdn,xtest,"StudentT")
+proc.time() - ptm
+
+
+cdnmean=apply(fit$cdnSAVE,c(1,2),mean)
+ptm <- proc.time()
+
+fitG<-recursive(y,x,n,cdn,xtest,"Gaussian")
+proc.time() - ptm
+
+
+#monte carlo
+ptm <- proc.time()
+mc=25
+
+
+x1=x[x==1]
+y1=y[x==1]
+x2=x[x==2]
+y2=y[x==2]
+cdnMC<-matrix(0,size[1],size[2])
+cdnMC1<-matrix(0,size[1],1)
+cdnMC2<-matrix(0,size[1],1)
+
+for (t in 1:mc){
+  cdn<-cdn0
+  perm=sample(seq(1,n,1),replace=FALSE)
+  y=y[perm]
+  x=x[perm]
+  fitMC<-recursive(y,x,n,cdn,xtest,"StudentT")
+  cdnMC<-cdnMC+fitMC$cdn
+  
+ 
+  
+
+}
+
+
+for (t in 1:mc){
+
+  cdn<-cdn0
+  perm1=sample(seq(1,length(x1),1),replace=FALSE)
+  y1=y1[perm1]
+  x1=x1[perm1]
+
+
+  fit1<-recursive(y1,x1,length(x1),cdn,xtest,"StudentT")
+  cdnMC1<-cdnMC1+fit1$cdn[,1]
+
+  
+  
+}
+
+
+for (t in 1:mc){
+  
+  cdn<-cdn0
+  perm2=sample(seq(1,length(x2),1),replace=FALSE)
+  y2=y2[perm2]
+  x2=x2[perm2]
+  
+
+  fit2<-recursive(y2,x2,length(x2),cdn,xtest,"StudentT")
+  cdnMC2<-cdnMC2+fit2$cdn[,2]
+  
+  
+}
+
+
+
+cdnMC<-cdnMC/mc
+cdnMC1<-cdnMC1/mc
+cdnMC2<-cdnMC2/mc
+
+proc.time() - ptm
+
+print(sum(fit$saveP))
+
+
+
+
+
+
+#plot CDF
+
+par(mfrow=c(2,2))
+dd=1
+aa=ecdf(y[x==xtest[dd]])
+plot(ytest,cdnMC[,dd],lwd=2,type="l",lty=2,
+     xlab="y",ylab="Cdf",ylim=c(0,1),main="x=1")
+lines(ytest,dtrue(ytest,xtest[dd]),lwd=2,
+      type="l",lty=1,col="blue")
+lines(ytest,aa(ytest),lwd=2,type="l",lty=1,
+      col="red")
+lines(ytest,cdnMC1,lwd=2,type="l",lty=2,
+      col="green")
+legend(1.50,0.500, c("True","Empir","RR","HMW"),lty=c(1,1,1,1),
+       col=c("blue","red","black","green"),bty="n",y.intersp=0.2)
+
+dd=2
+aa=ecdf(y[x==xtest[dd]])
+plot(ytest,cdnMC[,dd],lwd=2,type="l",lty=2,
+     xlab="y",ylab="Cdf",ylim=c(0,1),main="x=2")
+lines(ytest,dtrue(ytest,xtest[dd]),lwd=2,
+      type="l",lty=1,col="blue")
+lines(ytest,aa(ytest),lwd=2,type="l",lty=1,
+      col="red")
+lines(ytest,cdnMC2,lwd=2,type="l",lty=2,
+      col="green")
+legend(1.50,0.500, c("True","Empir","RR","HMW"),lty=c(1,1,1,1),
+       col=c("blue","red","black","green"),bty="n",y.intersp=0.2)
+  
